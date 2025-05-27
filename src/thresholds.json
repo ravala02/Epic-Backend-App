@@ -1,0 +1,44 @@
+{
+    "2093-3": {
+        "name": "Cholesterol Total",
+        "low": 125,
+        "high": 180,
+        "unit": "mg/dL"
+    },
+    "4548-4": {
+        "name": "Hemoglobin A1c",
+        "low": 0,
+        "high": 5.7,
+        "unit": "%"
+    },
+    "777-3": {
+        "name": "Hematocrit",
+        "low": 36,
+        "high": 50,
+        "unit": "%"
+    },
+    "789-8": {
+        "name": "Erythrocyte Distribution Width",
+        "low": 11.5,
+        "high": 14.5,
+        "unit": "%"
+    },
+    "6690-2": {
+        "name": "Platelet Count",
+        "low": 3.3,
+        "high": 10,
+        "unit": "10^3/µL"
+    },
+    "8480-6": {
+        "name": "Systolic Blood Pressure",
+        "low": 90,
+        "high": 120,
+        "unit": "mmHg"
+    },
+    "8462-4": {
+        "name": "Diastolic Blood Pressure",
+        "low": 60,
+        "high": 80,
+        "unit": "mmHg"
+    }
+}
