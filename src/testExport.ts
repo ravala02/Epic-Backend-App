@@ -29,15 +29,19 @@ async function runReport() {
         if (!line.trim()) continue;
         const p: any = JSON.parse(line);
         let display = p.id;
-        if (Array.isArray(p.name) && p.name.length) {
+        if (Array.isArray(p.name) && p.name.length > 0) {
           const nm = p.name[0];
-          const given = Array.isArray(nm.given) ? nm.given.join(' ') : '';
-          const fam = nm.family || '';
-          display = [given, fam].filter(Boolean).join(' ');
+          if (nm.text) {
+            display = nm.text;
+          } else {
+            const given = Array.isArray(nm.given) ? nm.given.join(' ') : '';
+            const fam = nm.family || '';
+            display = [given, fam].filter(Boolean).join(' ');
+          }
         }
         // Calculate age
         let age: number | undefined = undefined;
-        if (p.birthDate) {
+        if (p.birthDate?.trim()) {
           const dob = new Date(p.birthDate);
           const now = new Date();
           age = now.getFullYear() - dob.getFullYear();
@@ -46,6 +50,8 @@ async function runReport() {
         }
         patientDetails[p.id] = { name: display, gender: p.gender, age };
       }
+      // Print patient map for debugging
+      console.log('Patient map:', patientDetails);
     }
 
     // 4) categorize labs
@@ -127,7 +133,9 @@ async function runReport() {
       ${svgBar('Vitals', normalVitals.length, abnormalVitals.length, totalVitals)}
       <ul>
         <li><strong>Total Patients:</strong> ${patientIds.length}</li>
+        <li><strong>Total Normal Labs:</strong> ${normalLabs.length}</li>
         <li><strong>Total Abnormal Labs:</strong> ${abnormalLabs.length}</li>
+        <li><strong>Total Normal Vitals:</strong> ${normalVitals.length}</li>
         <li><strong>Total Abnormal Vitals:</strong> ${abnormalVitals.length}</li>
       </ul>
     `;
@@ -198,8 +206,37 @@ async function runReport() {
     }
 
     // Helper: escape HTML for patient names/ids
-    function esc(str: string) {
-      return str.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+    function esc(str: string | undefined) {
+      return (str ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+    }
+
+    // Helper: show more/less toggle for tables
+    function showMoreTable(rows: string[], maxRows: number, tableId: string) {
+      if (rows.length <= maxRows) return rows.join('');
+      return `
+        ${rows.slice(0, maxRows).join('')}
+        <tr id="showmore-${tableId}"><td colspan="100%" style="text-align:center;cursor:pointer;color:#2980b9;" onclick="this.style.display='none';document.querySelectorAll('.more-${tableId}').forEach(r=>r.style.display='');">Show more…</td></tr>
+        ${rows.slice(maxRows).map(r => r.replace('<tr', `<tr class='more-${tableId}' style='display:none;'`)).join('')}
+      `;
+    }
+
+    // Helper: trend chart for a vital/lab sign (with placeholder)
+    function trendChart(values: { value: number, low: number, high: number }[], width = 180, height = 40) {
+      if (values.length < 2) {
+        // Show a single point or placeholder
+        const y = height / 2, x = width / 2;
+        return `<svg width='${width}' height='${height}' style='margin-bottom:4px;'><circle cx='${x}' cy='${y}' r='4' fill='#bbb' /><text x='${x + 8}' y='${y + 4}' font-size='12' fill='#888'>No trend data</text></svg>`;
+      }
+      const min = Math.min(...values.map(v => v.value), ...values.map(v => v.low)),
+        max = Math.max(...values.map(v => v.value), ...values.map(v => v.high));
+      const y = (v: number) => height - ((v - min) / (max - min || 1)) * (height - 10) - 5;
+      const x = (i: number) => (i / (values.length - 1 || 1)) * (width - 10) + 5;
+      const points = values.map((v, i) => `${x(i)},${y(v.value)}`).join(' ');
+      const abnPts = values.map((v, i) => (v.value < v.low || v.value > v.high) ? `<circle cx='${x(i)}' cy='${y(v.value)}' r='3' fill='#c0392b' />` : '').join('');
+      const normPts = values.map((v, i) => (v.value >= v.low && v.value <= v.high) ? `<circle cx='${x(i)}' cy='${y(v.value)}' r='3' fill='#27ae60' />` : '').join('');
+      const bandY1 = y(Math.max(...values.map(v => v.low)));
+      const bandY2 = y(Math.min(...values.map(v => v.high)));
+      return `<svg width='${width}' height='${height}' style='margin-bottom:4px;'><rect x='0' y='${bandY2}' width='${width}' height='${bandY1 - bandY2}' fill='#eafaf1' /><polyline fill='none' stroke='#2980b9' stroke-width='2' points='${points}' />${abnPts}${normPts}</svg>`;
     }
 
     // Summary Table (quick links and key findings)
@@ -208,11 +245,16 @@ async function runReport() {
         <tr style="background:#f3f6fa;"><th>Patient</th><th>Abnormal Labs</th><th>Abnormal Vitals</th><th>Key Alerts</th></tr>
         ${patientResults.map(p => {
       const alerts = cdsAlerts([...p.abnormalLabs, ...p.normalLabs], [...p.abnormalVitals, ...p.normalVitals]);
+      let alertSummary = '';
+      if (alerts.length === 1) alertSummary = alerts[0];
+      else if (alerts.length > 1) alertSummary = alerts.slice(0, 2).join('; ') + (alerts.length > 2 ? '…' : '');
+      else if (p.abnormalLabs.length === 0 && p.abnormalVitals.length === 0) alertSummary = 'All results within normal limits';
+      else alertSummary = 'No critical alerts';
       return `<tr>
             <td><a href="#patient-${esc(p.id)}">${esc(p.name)}</a>${p.age !== undefined ? ` (${p.age}y)` : ''}${p.gender ? `, ${p.gender}` : ''}</td>
             <td style="color:#c0392b;font-weight:bold;">${p.abnormalLabs.length}</td>
             <td style="color:#c0392b;font-weight:bold;">${p.abnormalVitals.length}</td>
-            <td>${alerts.length ? alerts.map(a => `⚠️ ${esc(a)}`).join('<br>') : ''}</td>
+            <td>${esc(alertSummary)}</td>
           </tr>`;
     }).join('')}
       </table>
@@ -224,58 +266,115 @@ async function runReport() {
       // Group vitals by display name, exclude height/weight
       const allVitals = [...p.abnormalVitals, ...p.normalVitals];
       const vitalsByType: Record<string, { value: number, low: number, high: number, unit: string, timestamp?: string }[]> = {};
+
+      let latestHeight: { value: number, unit: string, timestamp?: string } | undefined;
+      let latestWeight: { value: number, unit: string, timestamp?: string } | undefined;
+
       allVitals.forEach(v => {
         const key = v.display;
+        // Find latest Height and Weight
+        if (/height/i.test(key)) {
+          if (!latestHeight || (v.timestamp && (!latestHeight.timestamp || new Date(v.timestamp) > new Date(latestHeight.timestamp)))) {
+            latestHeight = { value: v.value, unit: v.unit || '', timestamp: v.timestamp };
+          }
+          return; // Exclude height from trends
+        }
+        if (/weight/i.test(key)) {
+          if (!latestWeight || (v.timestamp && (!latestWeight.timestamp || new Date(v.timestamp) > new Date(latestWeight.timestamp)))) {
+            latestWeight = { value: v.value, unit: v.unit || '', timestamp: v.timestamp };
+          }
+          return; // Exclude weight from trends
+        }
         if (/height|weight/i.test(key)) return; // Exclude height/weight
         if (!vitalsByType[key]) vitalsByType[key] = [];
         vitalsByType[key].push({ value: v.value, low: v.low, high: v.high, unit: v.unit || '', timestamp: (v as any).timestamp });
       });
+      // Group labs by test name for trend charts
+      const allLabs = [...p.abnormalLabs, ...p.normalLabs];
+      const labsByType: Record<string, { value: number, low: number, high: number, unit: string, timestamp?: string }[]> = {};
+      allLabs.forEach(l => {
+        const key = l.test;
+        if (!labsByType[key]) labsByType[key] = [];
+        labsByType[key].push({ value: l.value, low: l.low, high: l.high, unit: l.unit || '', timestamp: (l as any).timestamp });
+      });
       return `
-      <details class="patient-section" id="patient-${esc(p.id)}" open>
-        <summary class="patient-header"><strong>Patient:</strong> ${esc(p.name)} <span style="color:#888;font-size:0.9em;">(${esc(p.id)})</span>${p.age !== undefined ? ` &nbsp; <strong>Age:</strong> ${p.age}` : ''}${p.gender ? ` &nbsp; <strong>Gender:</strong> ${esc(p.gender)}` : ''}</summary>
+      <details class="patient-section" id="patient-${esc(p.id)}">
+        <summary class="patient-header"><strong>Patient:</strong> ${esc(p.name)} <span style="color:#888;font-size:0.9em;">(${esc(p.id)})</span>${p.age !== undefined ? ` &nbsp; <strong>Age:</strong> ${p.age}` : ''}${p.gender ? ` &nbsp; <strong>Gender:</strong> ${esc(p.gender)}` : ''}${latestHeight ? ` &nbsp; <strong>Height:</strong> ${latestHeight.value}${esc(latestHeight.unit)}` : ''}${latestWeight ? ` &nbsp; <strong>Weight:</strong> ${latestWeight.value}${esc(latestWeight.unit)}` : ''}</summary>
         ${alerts.length ? `<div style='color:#c0392b; font-weight:bold; margin-bottom:8px;'>${alerts.map(a => `⚠️ ${esc(a)}`).join('<br>')}</div>` : ''}
         ${Object.entries(vitalsByType).map(([vital, vals]) => {
         const unit = vals[0].unit ? vals[0].unit : '';
-        const maxRows = 7;
+        const maxRows = 3;
+        const tableId = `${esc(p.id)}-${esc(vital)}`;
+        const rows = vals.map(v => `
+            <tr class="${v.value < v.low || v.value > v.high ? 'abnormal' : 'normal'}">
+              <td>${highlightCritical(v.value, v.low, v.high)}</td><td>${esc(v.unit)}</td><td>${v.low} - ${v.high}</td>${v.timestamp ? `<td>${esc(v.timestamp)}</td>` : ''}
+            </tr>
+          `);
         return `
             <div class="section-title">${esc(vital)} Trend (${esc(unit)})</div>
-            ${vitalTrendChart(vals, 180, 40)}
+            ${trendChart(vals, 180, 40)}
             <table><tr><th>Value</th><th>Unit</th><th>Reference Range</th>${vals.some(v => v.timestamp) ? '<th>Time</th>' : ''}</tr>
-              ${vals.slice(0, maxRows).map(v => `
-                <tr class="${v.value < v.low || v.value > v.high ? 'abnormal' : 'normal'}">
-                  <td>${highlightCritical(v.value, v.low, v.high)}</td><td>${esc(v.unit)}</td><td>${v.low} - ${v.high}</td>${v.timestamp ? `<td>${esc(v.timestamp)}</td>` : ''}
-                </tr>
-              `).join('')}
-            </table>${vals.length > maxRows ? `<div style='font-size:0.95em;color:#888;'>...and ${vals.length - maxRows} more values not shown.</div>` : ''}
+              ${showMoreTable(rows, maxRows, tableId)}
+            </table>
+          `;
+      }).join('')}
+        ${Object.entries(labsByType).filter(([lab, vals]) => vals.length > 1).map(([lab, vals]) => {
+        const unit = vals[0].unit ? vals[0].unit : '';
+        const maxRows = 3;
+        const tableId = `${esc(p.id)}-${esc(lab)}`;
+        const rows = vals.map(lr => `
+            <tr class="${lr.value < lr.low || lr.value > lr.high ? 'abnormal' : 'normal'}">
+              <td>${highlightCritical(lr.value, lr.low, lr.high)}</td><td>${esc(lr.unit)}</td><td>${lr.low} - ${lr.high}</td>${lr.timestamp ? `<td>${esc(lr.timestamp)}</td>` : ''}
+            </tr>
+          `);
+        return `
+            <div class="section-title">${esc(lab)} Trend (${esc(unit)})</div>
+            ${trendChart(vals, 180, 40)}
+            <table><tr><th>Value</th><th>Unit</th><th>Reference Range</th>${vals.some(lr => lr.timestamp) ? '<th>Time</th>' : ''}</tr>
+              ${showMoreTable(rows, maxRows, tableId)}
+            </table>
           `;
       }).join('')}
         ${p.abnormalLabs.length ? `
           <div class="section-title">Abnormal Labs (${p.abnormalLabs.length})</div>
           <table><tr><th>Test</th><th>Value</th><th>Unit</th><th>Reference Range</th></tr>
-            ${p.abnormalLabs.map(lr => `
+            ${p.abnormalLabs.slice(0, 3).map(lr => `
               <tr class="abnormal">
                 <td>${esc(lr.test)}</td><td>${highlightCritical(lr.value, lr.low, lr.high)}</td><td>${esc(lr.unit || '')}</td><td>${lr.low} - ${lr.high}</td>
               </tr>
             `).join('')}
-          </table>` : ''}
+          </table>${p.abnormalLabs.length > 3 ? `<div style='font-size:0.95em;color:#888;'>...and ${p.abnormalLabs.length - 3} more abnormal labs not shown.</div>` : ''}` : ''}
         ${p.normalLabs.length ? `
-          <div class="section-title">Normal Labs (showing up to 5 of ${p.normalLabs.length})</div>
+          <div class="section-title">Normal Labs (showing up to 3 of ${p.normalLabs.length})</div>
           <table><tr><th>Test</th><th>Value</th><th>Unit</th><th>Reference Range</th></tr>
-            ${p.normalLabs.slice(0, 5).map(lr => `
+            ${p.normalLabs.slice(0, 3).map(lr => `
               <tr class="normal">
                 <td>${esc(lr.test)}</td><td>${highlightCritical(lr.value, lr.low, lr.high)}</td><td>${esc(lr.unit || '')}</td><td>${lr.low} - ${lr.high}</td>
-              </tr>
-            `).join('')}
-          </table>${p.normalLabs.length > 5 ? `<div style='font-size:0.95em;color:#888;'>...and ${p.normalLabs.length - 5} more normal labs not shown.</div>` : ''}` : ''}
+                </tr>
+              `).join('')}
+          </table>${p.normalLabs.length > 3 ? `<div style='font-size:0.95em;color:#888;'>...and ${p.normalLabs.length - 3} more normal labs not shown.</div>` : ''}` : ''}
       </details>
     `}).join('');
+
+    // Add Show All/Collapse All toggle
+    const toggleScript = `
+      <script>
+        function showAllPatients(expand) {
+          document.querySelectorAll('.patient-section').forEach(d => d.open = expand);
+        }
+      </script>
+      <div style='margin-bottom:12px;'>
+        <button onclick='showAllPatients(true)' style='margin-right:8px;'>Show All</button>
+        <button onclick='showAllPatients(false)'>Collapse All</button>
+      </div>
+    `;
 
     const html = `
       ${style}
       <h1>Daily Patient Report</h1>
+      ${toggleScript}
       ${summary}
       ${summaryTable}
-      ${triageSection}
       ${patientSections}
     `;
 

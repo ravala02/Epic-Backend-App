@@ -24,6 +24,7 @@ export interface Observation {
     }>;
     text?: string;
   };
+  effectiveDateTime?: string;
   valueQuantity: {
     value: number;
     unit: string;
@@ -50,4 +51,5 @@ export interface VitalResult {
   unit?: string;
   low: number;
   high: number;
+  timestamp?: string;
 }

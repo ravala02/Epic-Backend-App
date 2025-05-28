@@ -37,16 +37,6 @@ export async function categorizeVitals(
       // Debug category
       console.log('🔍 Observation category:', JSON.stringify(obs.category));
 
-      // Only process vital-signs observations
-      const isVital = obs.category?.some(cat =>
-        cat.coding?.some(c => c.code === 'vital-signs' && c.system?.includes('observation-category'))
-      );
-      if (!isVital) {
-        console.log('⏭️  Skipping non-vital observation');
-        continue;
-      }
-      console.log('✅ Found vital observation');
-
       // guard against missing code/coding
       const coding = obs.code?.coding?.[0];
       if (!coding) {
