@@ -5,29 +5,59 @@
         "high": 180,
         "unit": "mg/dL"
     },
+    "29463-7": {
+        "name": "Body Weight (Measured)",
+        "low": 40,
+        "high": 150,
+        "unit": "kg"
+    },
+    "3141-9": {
+        "name": "Body Weight",
+        "low": 40,
+        "high": 150,
+        "unit": "kg"
+    },
+    "4544-3": {
+        "name": "Hematocrit",
+        "low": 36,
+        "high": 50,
+        "unit": "%"
+    },
     "4548-4": {
         "name": "Hemoglobin A1c",
         "low": 0,
         "high": 5.7,
         "unit": "%"
     },
-    "777-3": {
-        "name": "Hematocrit",
-        "low": 36,
-        "high": 50,
-        "unit": "%"
+    "6690-2": {
+        "name": "Platelet Count",
+        "low": 150,
+        "high": 450,
+        "unit": "10^3/µL"
     },
-    "789-8": {
-        "name": "Erythrocyte Distribution Width",
+    "788-0": {
+        "name": "RDW (Erythrocyte Distribution Width)",
         "low": 11.5,
         "high": 14.5,
         "unit": "%"
     },
-    "6690-2": {
-        "name": "Platelet Count",
-        "low": 3.3,
-        "high": 10,
-        "unit": "10^3/µL"
+    "8302-2": {
+        "name": "Body Height",
+        "low": 120,
+        "high": 210,
+        "unit": "cm"
+    },
+    "8310-5": {
+        "name": "Body Temperature",
+        "low": 36.0,
+        "high": 37.5,
+        "unit": "Cel"
+    },
+    "8462-4": {
+        "name": "Diastolic Blood Pressure",
+        "low": 60,
+        "high": 80,
+        "unit": "mmHg"
     },
     "8480-6": {
         "name": "Systolic Blood Pressure",
@@ -35,10 +65,64 @@
         "high": 120,
         "unit": "mmHg"
     },
-    "8462-4": {
-        "name": "Diastolic Blood Pressure",
+    "8716-3": {
+        "name": "Oxygen Saturation",
+        "low": 95,
+        "high": 100,
+        "unit": "%"
+    },
+    "8867-4": {
+        "name": "Heart Rate",
+        "low": 60,
+        "high": 100,
+        "unit": "/min"
+    },
+    "9279-1": {
+        "name": "Respiratory Rate",
+        "low": 12,
+        "high": 20,
+        "unit": "/min"
+    },
+    "777-3": {
+        "name": "Platelet Count (alternative code)",
+        "low": 150,
+        "high": 450,
+        "unit": "10^3/µL"
+    },
+    "789-8": {
+        "name": "Red Blood Cell Count",
+        "low": 4.0,
+        "high": 6.0,
+        "unit": "10^6/µL"
+    },
+    "59576-9": {
+        "name": "BMI Percentile",
+        "low": 5,
+        "high": 95,
+        "unit": "%"
+    },
+    "6": {
+        "name": "Demo Heart Rate",
+        "low": 60,
+        "high": 100,
+        "unit": "/min"
+    },
+    "8": {
+        "name": "Demo Systolic Blood Pressure",
+        "low": 90,
+        "high": 120,
+        "unit": "mmHg"
+    },
+    "11": {
+        "name": "Demo Diastolic Blood Pressure",
         "low": 60,
         "high": 80,
         "unit": "mmHg"
+    },
+    "14": {
+        "name": "Demo Body Temperature",
+        "low": 36.0,
+        "high": 37.5,
+        "unit": "Cel"
     }
 }

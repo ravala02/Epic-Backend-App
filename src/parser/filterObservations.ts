@@ -1,68 +1,88 @@
-// src/parser/filterObservations.ts
-
 import fetch from 'node-fetch';
-import rawThresholds from '../thresholds.json';
-import { Observation, ThresholdDef } from '../types';
+import thresholds from '../thresholds.json';
+import { LabResult } from '../types';
 
-export interface LabResult {
-  patientId: string;
-  test: string;
-  value: number;
-  unit: string;
-  low?: number;
-  high?: number;
+interface Observation {
+  id: string;
+  subject: { reference: string };
+  code?: {
+    coding?: Array<{ code: string; display?: string }>;
+    text?: string;
+  };
+  valueQuantity?: { value: number; unit?: string };
+  category?: Array<{
+    coding?: Array<{ code: string; system?: string }>;
+  }>;
 }
-
-// tell TypeScript “this is a string→ThresholdDef map”
-const thresholds = rawThresholds as Record<string, ThresholdDef>;
 
 export async function categorizeLabResults(
   urls: string[],
-  token: string
+  token: string,
+  patientMap: Record<string, string>
 ): Promise<{ normal: LabResult[]; abnormal: LabResult[] }> {
   const normal: LabResult[] = [];
   const abnormal: LabResult[] = [];
 
   for (const url of urls) {
+    console.log('🔬 Processing lab observations from:', url);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      console.warn(`⚠️  Skipping lab file ${url}: ${res.status}`);
-      continue;
-    }
-
+    if (!res.ok) throw new Error(`Failed to fetch labs at ${url}: ${res.status}`);
     const ndjson = await res.text();
-    for (const line of ndjson.split('\n')) {
-      if (!line.trim()) continue;
+    const lines = ndjson.split('\n').filter(line => line.trim());
+    console.log(`📊 Found ${lines.length} total observations`);
 
+    for (const line of lines) {
       const obs = JSON.parse(line) as Observation;
-      const patRef = obs.subject?.reference || '';
-      const patientId = patRef.split('/')[1] || '';
 
+      // Debug category
+      console.log('🔍 Observation category:', JSON.stringify(obs.category));
+
+      // guard against missing code/coding
       const coding = obs.code?.coding?.[0];
-      const code = coding?.code;
-      if (!code) continue;
+      if (!coding) {
+        console.log('⚠️  Missing code/coding');
+        continue;
+      }
 
-      const th = thresholds[code];
-      const testName = th?.name || coding.display || obs.code?.text || 'Unknown';
-      const val = obs.valueQuantity?.value;
-      const unit = obs.valueQuantity?.unit || '';
+      const loinc = coding.code;
+      if (!(loinc in thresholds)) {
+        console.warn(`⚠️  No threshold defined for LOINC ${loinc}`);
+        continue;
+      }
+      const def = thresholds[loinc as keyof typeof thresholds];
 
-      if (typeof val !== 'number') continue;
+      // strip off "Patient/" from reference
+      const patientId = obs.subject.reference.split('/').pop()!;
 
-      const result: LabResult = { patientId, test: testName, value: val, unit };
-      if (th) {
-        result.low = th.low;
-        result.high = th.high;
-        if (val < th.low || val > th.high) {
-          abnormal.push(result);
-        } else {
-          normal.push(result);
-        }
+      const vq = obs.valueQuantity;
+      if (!vq) {
+        console.log('⚠️  Missing valueQuantity');
+        continue;
+      }
+      const value = vq.value;
+      const unit = vq.unit;
+
+      const result: LabResult = {
+        id: obs.id,
+        patientId,
+        patientName: patientMap[patientId] || patientId,
+        test: obs.code!.text ?? coding.display ?? loinc,
+        value,
+        unit,
+        low: def.low,
+        high: def.high,
+      };
+
+      if (value < def.low || value > def.high) {
+        console.log('⚠️  Abnormal lab value:', result);
+        abnormal.push(result);
       } else {
+        console.log('✅ Normal lab value:', result);
         normal.push(result);
       }
     }
   }
 
+  console.log(`📊 Final counts - Normal: ${normal.length}, Abnormal: ${abnormal.length}`);
   return { normal, abnormal };
 }

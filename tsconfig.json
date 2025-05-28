@@ -10,5 +10,9 @@
         "skipLibCheck": true,
         "resolveJsonModule": true,
         "allowSyntheticDefaultImports": true
-    }
+    },
+    "include": [
+        "src/**/*", // your .ts/.json under src
+        "custom.d.ts" // the ambient file at project root
+    ]
 }

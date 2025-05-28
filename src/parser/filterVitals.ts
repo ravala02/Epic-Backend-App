@@ -1,66 +1,98 @@
-// src/parser/filterVitals.ts
-
 import fetch from 'node-fetch';
-import thresholdsData from '../thresholds.json';
+import thresholds from '../thresholds.json';
+import { VitalResult } from '../types';
 
-export interface VitalResult {
-  patientId: string;
-  display: string;    // ← make sure you have this
-  value: number;
-  unit: string;
-  low?: number;
-  high?: number;
+interface Observation {
+  id: string;
+  subject: { reference: string };
+  code?: {
+    coding?: Array<{ code: string; display?: string }>;
+    text?: string;
+  };
+  valueQuantity?: { value: number; unit?: string };
+  category?: Array<{
+    coding?: Array<{ code: string; system?: string }>;
+  }>;
 }
 
 export async function categorizeVitals(
   urls: string[],
-  token: string
+  token: string,
+  patientMap: Record<string, string>
 ): Promise<{ normal: VitalResult[]; abnormal: VitalResult[] }> {
   const normal: VitalResult[] = [];
   const abnormal: VitalResult[] = [];
 
   for (const url of urls) {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    console.log('🫀 Processing vital observations from:', url);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`Failed to fetch vitals at ${url}: ${res.status}`);
     const ndjson = await res.text();
+    const lines = ndjson.split('\n').filter(line => line.trim());
+    console.log(`📊 Found ${lines.length} total observations`);
 
-    for (const line of ndjson.split('\n')) {
-      if (!line.trim()) continue;
-      const obs: any = JSON.parse(line);
+    for (const line of lines) {
+      const obs = JSON.parse(line) as Observation;
 
-      const patientId = obs.subject?.reference?.split('/')[1];
+      // Debug category
+      console.log('🔍 Observation category:', JSON.stringify(obs.category));
+
+      // Only process vital-signs observations
+      const isVital = obs.category?.some(cat =>
+        cat.coding?.some(c => c.code === 'vital-signs' && c.system?.includes('observation-category'))
+      );
+      if (!isVital) {
+        console.log('⏭️  Skipping non-vital observation');
+        continue;
+      }
+      console.log('✅ Found vital observation');
+
+      // guard against missing code/coding
       const coding = obs.code?.coding?.[0];
-      const display = coding?.display || obs.code?.text || '‹no-display›';
-      const val = obs.valueQuantity?.value;
-      const unit = obs.valueQuantity?.unit;
-      if (!patientId || val == null || !unit) continue;
+      if (!coding) {
+        console.log('⚠️  Missing code/coding');
+        continue;
+      }
 
-      // Look up thresholds by code
-      const thrEntry = (thresholdsData as Record<string, {
-        name: string;
-        low: number;
-        high: number;
-        unit: string;
-      }>)[coding.code as string];
+      const loinc = coding.code;
+      console.log('Vital LOINC code:', loinc);
+      if (!(loinc in thresholds)) {
+        console.warn(`⚠️  No threshold defined for LOINC ${loinc}`);
+        continue;
+      }
+      const def = thresholds[loinc as keyof typeof thresholds];
 
-      const low = thrEntry?.low;
-      const high = thrEntry?.high;
+      const patientId = obs.subject.reference.split('/').pop()!;
 
-      const result: VitalResult = { patientId, display, value: val, unit, low, high };
+      const vq = obs.valueQuantity;
+      if (!vq) {
+        console.log('⚠️  Missing valueQuantity');
+        continue;
+      }
+      const value = vq.value;
+      const unit = vq.unit;
 
-      if (thrEntry) {
-        if (val < low! || val > high!) {
-          abnormal.push(result);
-        } else {
-          normal.push(result);
-        }
+      const result: VitalResult = {
+        id: obs.id,
+        patientId,
+        patientName: patientMap[patientId] || patientId,
+        display: obs.code!.text ?? coding.display ?? loinc,
+        value,
+        unit,
+        low: def.low,
+        high: def.high,
+      };
+
+      if (value < def.low || value > def.high) {
+        console.log('⚠️  Abnormal vital value:', result);
+        abnormal.push(result);
       } else {
-        // no threshold defined → treat as normal
+        console.log('✅ Normal vital value:', result);
         normal.push(result);
       }
     }
   }
 
+  console.log(`📊 Final counts - Normal: ${normal.length}, Abnormal: ${abnormal.length}`);
   return { normal, abnormal };
 }
