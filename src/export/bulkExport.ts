@@ -60,7 +60,7 @@ export async function pollExportStatus(
     statusUrl: string,
     accessToken: string,
     intervalMs = 5000
-): Promise<string[]> {
+): Promise<Array<{ type: string; url: string }>> {
     console.log('🔍 Polling export status at:', statusUrl);
     while (true) {
         const res = await fetch(statusUrl, {
@@ -78,12 +78,12 @@ export async function pollExportStatus(
         }
 
         if (res.status === 200) {
-            const body = (await res.json()) as { output?: { url: string }[] };
+            const body = (await res.json()) as { output?: Array<{ type: string; url: string }> };
             if (!body.output) {
                 throw new Error('Missing output URLs in status response');
             }
-            console.log('📦 Export complete. Files:', body.output.map(o => o.url));
-            return body.output.map((o) => o.url);
+            console.log('📦 Export complete. Files:', body.output.map(o => `${o.type}: ${o.url}`));
+            return body.output;
         }
 
         const text = await res.text();

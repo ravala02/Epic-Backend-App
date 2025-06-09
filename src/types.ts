@@ -40,6 +40,7 @@ export interface LabResult {
   unit?: string;
   low: number;
   high: number;
+  timestamp?: string;
 }
 
 export interface VitalResult {
@@ -47,9 +48,9 @@ export interface VitalResult {
   patientId: string;
   patientName: string;
   display: string;
-  value: number;
+  value: number | undefined;
   unit?: string;
-  low: number;
-  high: number;
+  low?: number;
+  high?: number;
   timestamp?: string;
 }

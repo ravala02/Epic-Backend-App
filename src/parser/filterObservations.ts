@@ -13,6 +13,7 @@ interface Observation {
   category?: Array<{
     coding?: Array<{ code: string; system?: string }>;
   }>;
+  effectiveDateTime?: string;
 }
 
 export async function categorizeLabResults(
@@ -40,6 +41,17 @@ export async function categorizeLabResults(
     let skipped = 0, missingThreshold = 0;
     for (const line of lines) {
       const obs = JSON.parse(line) as Observation;
+
+      // Filter by category: only process laboratory observations
+      const isLaboratory = obs.category?.some(cat =>
+        cat.coding?.some(c => c.system === 'http://terminology.hl7.org/CodeSystem/observation-category' && c.code === 'laboratory')
+      );
+
+      if (!isLaboratory) {
+        skipped++;
+        continue;
+      }
+
       // Try to extract LOINC code from multiple possible locations
       let loinc: string | undefined = undefined;
       let coding = obs.code?.coding?.[0];
@@ -67,6 +79,7 @@ export async function categorizeLabResults(
         unit,
         low: def.low,
         high: def.high,
+        timestamp: obs.effectiveDateTime,
       };
       if (typeof value !== 'number' || typeof def.low !== 'number' || typeof def.high !== 'number') {
         skipped++;
